@@ -1,0 +1,35 @@
+name: 0. Split Push Into Individual Commits
+
+on:
+  push:
+    branches: [ "main" ]
+
+jobs:
+  split-and-trigger:
+    runs-on: ubuntu-latest
+    permissions:
+      actions: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Trigger individual builds per commit
+        run: |
+          # Dùng "|| true" để nếu dải commit cũ bị lỗi (do force push), script không bị sập giữa chừng
+          COMMITS=$(git log --reverse --format="%H" ${{ github.event.before }}..${{ github.event.after }} 2>/dev/null || echo "")
+          
+          # Nếu không lấy được dải commit hoặc dải commit rỗng, dùng luôn commit hiện tại
+          if [ -z "$COMMITS" ]; then
+            echo "⚠️ Không tìm thấy dải commit cũ (có thể do Force Push). Đang lấy commit hiện tại..."
+            COMMITS="${{ github.sha }}"
+          fi
+
+          for commit in $COMMITS; do
+            echo "Triggering unified build for commit: $commit"
+            curl -X POST \
+              -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+              -H "Accept: application/vnd.github.v3+json" \
+              https://api.github.com/repos/${{ github.repository }}/actions/workflows/flutter_unified_build.yml/dispatches \
+              -d "{\"ref\":\"main\",\"inputs\":{\"commit_sha\":\"$commit\"}}"
+          done
