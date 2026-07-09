@@ -131,7 +131,7 @@ jobs:
           name: linux-artifact
           path: linux-release.zip
 
-# ================= JOB 5: BUILD WINDOWS =================
+  # ================= JOB 5: BUILD WINDOWS =================
   build-windows:
     needs: generate-tag
     runs-on: windows-latest
@@ -155,15 +155,29 @@ jobs:
           flutter pub get && flutter build windows --release
         shell: bash
         
-      # 👑 SỬA ĐƯỜNG DẪN Ở ĐÂY: Thay 'runner' bằng 'bundle'
+      # 👑 GIẢI PHÁP THÔNG MINH: Tự dò cấu trúc thư mục thực tế và nén file
       - name: Zip Windows Artifact
-        run: Compress-Archive -Path build\windows\x64\release\bundle\* -DestinationPath windows-release.zip
+        run: |
+          echo "=== Kiểm tra cấu trúc thư mục build thực tế ==="
+          Get-ChildItem -Path build\windows\ -Recurse -Filter "*.exe" | Select-Object FullName
+          
+          echo "=== Đang tìm thư mục chứa sản phẩm biên dịch ==="
+          $ExeFile = Get-ChildItem -Path build\windows\ -Recurse -Filter "*.exe" | Select-Object -First 1
+          if ($ExeFile) {
+              $TargetDir = $ExeFile.Directory.FullName
+              echo "Đã tìm thấy thư mục đích: $TargetDir"
+              Compress-Archive -Path "$TargetDir\*" -DestinationPath windows-release.zip -Force
+          } else {
+              echo "❌ Không tìm thấy bất kỳ file .exe nào! Sẽ nén toàn bộ thư mục release dự phòng."
+              Compress-Archive -Path "build\windows\x64\release\*" -DestinationPath windows-release.zip -Force
+          }
         shell: powershell
         
       - uses: actions/upload-artifact@v4
         with:
           name: windows-artifact
           path: windows-release.zip
+
   # ================= JOB 6: GOM FILE VÀ ĐĂNG RELEASE KÈM ĐỊNH DẠNG MÔ TẢ =================
   post-combined-release:
     needs: [generate-tag, build-android, build-web, build-linux, build-windows]
